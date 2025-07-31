@@ -1,7 +1,6 @@
-import java.util.Objects;
 import java.util.Scanner;
 
-class main {
+class Main {
     static String[] userName = new String[100];
     static String[] password = new String[100];
     static double[] balance = new double[100];
@@ -17,7 +16,10 @@ class main {
             System.out.println("2) Login User");
             System.out.println("3) Exit");
             int n = sc.nextInt();
-            if (n == 3) return;
+            if (n == 3) {
+                clearScreen();
+                return;
+            }
 
             if (n == 1) {
                 registerUser();
@@ -68,8 +70,7 @@ class main {
         String tempPassword = sc.nextLine();
         System.out.println("The user count is :-" + userCount);
         for (int i = 0; i <= userCount; i++)
-            if (Objects.equals(userName[i], tempUserName) && Objects.equals(password[i], tempPassword)) return i;
-
+            if (tempUserName.equals(userName[i]) && tempPassword.equals(password[i])) return i;
         return -1;
     }
 
