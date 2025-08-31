@@ -1,13 +1,22 @@
-import java.util.Scanner;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Scanner;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.regex.Pattern;
 
+// Main class to run the application
 class Main {
 
     static int userCount = 0;
     static final int MAX_USERS = 100;
     static final Scanner sc = new Scanner(System.in);
     static final User[] users = new User[MAX_USERS];
+
+    // Regex patterns for validation
+    private static final String EMAIL_REGEX = "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,6}$";
+    // Requires at least 8 chars, 1 uppercase, 1 lowercase, 1 digit
+    private static final String PASSWORD_REGEX = "^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z]).{8,}$";
+
 
     public static void main(String[] args) {
         while (true) {
@@ -73,23 +82,36 @@ class Main {
         while (true) {
             System.out.print("Enter email: ");
             email = sc.nextLine().trim();
-            if (!(email.contains("@") && email.contains("."))) {
-                System.out.println("Invalid email format. Please include '@' and '.'.");
+            if (!Pattern.matches(EMAIL_REGEX, email)) {
+                System.out.println("Invalid email format. Please enter a valid email (e.g., user@example.com).");
             } else {
                 break;
             }
         }
 
         String password;
-        do {
+        while (true) {
             System.out.print("Enter password (min 8 chars, 1 uppercase, 1 lowercase, 1 digit): ");
             password = sc.nextLine();
-        } while (!isPasswordValid(password));
+            if (isPasswordValid(password)) {
+                break;
+            } else {
+                System.out.println("Password does not meet the security requirements. Please try again.");
+            }
+        }
 
         System.out.print("Enter initial deposit amount: ");
         double balance = readPositiveDoubleAllowZero();
 
-        users[userCount] = new User(username, password, email, balance);
+        // Create user and bank account, then link them
+        User newUser = new User(username, password, email);
+        BankAccount newAccount = new BankAccount(newUser, balance);
+        newUser.setBankAccount(newAccount);
+
+        // Record the initial deposit as the first transaction
+        newUser.addTransaction("Initial Deposit", balance);
+
+        users[userCount] = newUser;
         userCount++;
 
         System.out.println("\n✅ Registration successful!");
@@ -106,29 +128,7 @@ class Main {
     }
 
     public static boolean isPasswordValid(String password) {
-        if (password.length() < 8) {
-            System.out.println("Password must be at least 8 characters long.");
-            return false;
-        }
-        boolean hasUpper = false, hasLower = false, hasDigit = false;
-        for (char c : password.toCharArray()) {
-            if (Character.isUpperCase(c)) hasUpper = true;
-            else if (Character.isLowerCase(c)) hasLower = true;
-            else if (Character.isDigit(c)) hasDigit = true;
-        }
-        if (!hasUpper) {
-            System.out.println("Password must contain at least one uppercase letter.");
-            return false;
-        }
-        if (!hasLower) {
-            System.out.println("Password must contain at least one lowercase letter.");
-            return false;
-        }
-        if (!hasDigit) {
-            System.out.println("Password must contain at least one digit.");
-            return false;
-        }
-        return true;
+        return Pattern.matches(PASSWORD_REGEX, password);
     }
 
     public static int loginUser() {
@@ -188,10 +188,12 @@ class Main {
         System.out.print("Enter the amount to deposit: ");
         double amount = readPositiveDouble();
         User u = users[userIndex];
-        u.setBalance(u.getBalance() + amount);
+
+        u.getBankAccount().deposit(amount);
         u.addTransaction("Deposit", amount);
+
         System.out.println("\nSuccessfully deposited $" + format(amount));
-        System.out.println("New balance: $" + format(u.getBalance()));
+        System.out.println("New balance: $" + format(u.getBankAccount().getBalance()));
         pause();
     }
 
@@ -202,13 +204,12 @@ class Main {
         double amount = readPositiveDouble();
         User u = users[userIndex];
 
-        if (amount > u.getBalance()) {
-            System.out.println("\n❌ Insufficient funds. Current balance: $" + format(u.getBalance()));
-        } else {
-            u.setBalance(u.getBalance() - amount);
+        if (u.getBankAccount().withdraw(amount)) {
             u.addTransaction("Withdrawal", amount);
             System.out.println("\nSuccessfully withdrew $" + format(amount));
-            System.out.println("New balance: $" + format(u.getBalance()));
+            System.out.println("New balance: $" + format(u.getBankAccount().getBalance()));
+        } else {
+            System.out.println("\n❌ Insufficient funds. Current balance: $" + format(u.getBankAccount().getBalance()));
         }
         pause();
     }
@@ -217,23 +218,25 @@ class Main {
         clearScreen();
         User u = users[userIndex];
         System.out.println("--- 📊 Current Balance ---");
-        System.out.println("Your current balance is: $" + format(u.getBalance()));
+        System.out.println("Your current balance is: $" + format(u.getBankAccount().getBalance()));
         pause();
     }
 
     public static void viewAccountDetails(int userIndex) {
         clearScreen();
         User u = users[userIndex];
+        BankAccount account = u.getBankAccount();
         System.out.println("--- 📜 Account Details ---");
-        System.out.println("Username : " + u.getName());
-        System.out.println("Email    : " + u.getEmail());
-        System.out.println("Balance  : $" + format(u.getBalance()));
+        System.out.println("Username    : " + u.getName());
+        System.out.println("Email       : " + u.getEmail());
+        System.out.println("Account No. : " + account.getAccountNumber());
+        System.out.println("Balance     : $" + format(account.getBalance()));
         System.out.println("\n--- Transaction History ---");
         if (u.getTransactionCount() == 0) {
             System.out.println("No transactions yet.");
         } else {
             for (int i = 0; i < u.getTransactionCount(); i++) {
-                System.out.printf("%-10s $%10s  %s%n",
+                System.out.printf("%-16s $%10s  %s%n",
                         u.getTxnType(i),
                         format(u.getTxnAmount(i)),
                         u.getTxnTimestamp(i));
@@ -293,11 +296,54 @@ class Main {
     }
 
     public static void clearScreen() {
-        // Works in many terminals; harmless otherwise.
         System.out.print("\033[H\033[2J");
         System.out.flush();
     }
 }
+
+/* ---------------- BankAccount Class ---------------- */
+
+class BankAccount {
+    private final String accountNumber;
+    private double balance; // Corrected typo from "doubal blance"
+    private final User owner;
+
+    public BankAccount(User owner, double initialBalance) {
+        this.owner = owner;
+        this.balance = initialBalance;
+        // Generate a simple random 10-digit account number
+        this.accountNumber = String.valueOf(ThreadLocalRandom.current().nextLong(1000000000L, 9999999999L));
+    }
+
+    // --- Getters ---
+    public String getAccountNumber() {
+        return accountNumber;
+    }
+
+    public double getBalance() {
+        return balance;
+    }
+
+    public User getOwner() {
+        return owner;
+    }
+
+    // --- Business Logic Methods (Better Encapsulation than a public setter for balance) ---
+    public void deposit(double amount) {
+        if (amount > 0) {
+            this.balance += amount;
+        }
+    }
+
+    public boolean withdraw(double amount) {
+        if (amount > 0 && amount <= this.balance) {
+            this.balance -= amount;
+            return true; // Withdrawal successful
+        }
+        return false; // Withdrawal failed
+    }
+}
+
 
 /* ---------------- User Class ---------------- */
 
@@ -305,33 +351,41 @@ class User {
     private final String userName;
     private final String password;
     private final String email;
-    private double balance;
 
-    // Simple fixed-size transaction store
+    // Each user is now linked to one bank account
+    private BankAccount bankAccount;
+
+    // Transaction store remains with the User to track their activity
     private static final int MAX_TXN = 500;
     private final String[] txnType = new String[MAX_TXN];
     private final double[] txnAmount = new double[MAX_TXN];
     private final String[] txnTimestamp = new String[MAX_TXN];
     private int txnCount = 0;
 
-    public User(String userName, String password, String email, double balance) {
+    // Constructor updated to not include balance directly
+    public User(String userName, String password, String email) {
         this.userName = userName;
         this.password = password;
         this.email = email;
-        this.balance = balance;
-        addTransaction("Initial", balance);
     }
 
+    // --- Getters and Setters ---
     public String getName() { return userName; }
     public String getPassword() { return password; }
     public String getEmail() { return email; }
-    public double getBalance() { return balance; }
-    public void setBalance(double balance) { this.balance = balance; }
 
+    public BankAccount getBankAccount() {
+        return bankAccount;
+    }
+
+    public void setBankAccount(BankAccount bankAccount) {
+        this.bankAccount = bankAccount;
+    }
+
+    // --- Transaction Methods ---
     public void addTransaction(String type, double amount) {
         if (txnCount >= MAX_TXN) {
-            // In a real system you'd expand or persist.
-            return;
+            return; // In a real system, handle this better
         }
         txnType[txnCount] = type;
         txnAmount[txnCount] = amount;
