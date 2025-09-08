@@ -4,19 +4,16 @@ import java.util.Scanner;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Pattern;
 
-// Main class to run the application
+/* ---------------- Main Application ---------------- */
 class Main {
-
     static int userCount = 0;
     static final int MAX_USERS = 100;
     static final Scanner sc = new Scanner(System.in);
     static final User[] users = new User[MAX_USERS];
 
-    // Regex patterns for validation
+    // Regex patterns
     private static final String EMAIL_REGEX = "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,6}$";
-    // Requires at least 8 chars, 1 uppercase, 1 lowercase, 1 digit
     private static final String PASSWORD_REGEX = "^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z]).{8,}$";
-
 
     public static void main(String[] args) {
         while (true) {
@@ -54,7 +51,6 @@ class Main {
     }
 
     /* ---------------- Registration & Login ---------------- */
-
     public static void registerUser() {
         clearScreen();
         System.out.println("--- 📝 User Registration ---");
@@ -83,7 +79,7 @@ class Main {
             System.out.print("Enter email: ");
             email = sc.nextLine().trim();
             if (!Pattern.matches(EMAIL_REGEX, email)) {
-                System.out.println("Invalid email format. Please enter a valid email (e.g., user@example.com).");
+                System.out.println("Invalid email format. Please enter a valid email.");
             } else {
                 break;
             }
@@ -93,22 +89,31 @@ class Main {
         while (true) {
             System.out.print("Enter password (min 8 chars, 1 uppercase, 1 lowercase, 1 digit): ");
             password = sc.nextLine();
-            if (isPasswordValid(password)) {
+            if (Pattern.matches(PASSWORD_REGEX, password)) {
                 break;
             } else {
-                System.out.println("Password does not meet the security requirements. Please try again.");
+                System.out.println("Password does not meet the security requirements.");
             }
         }
 
         System.out.print("Enter initial deposit amount: ");
         double balance = readPositiveDoubleAllowZero();
 
-        // Create user and bank account, then link them
-        User newUser = new User(username, password, email);
-        BankAccount newAccount = new BankAccount(newUser, balance);
-        newUser.setBankAccount(newAccount);
+        // Choose account type
+        System.out.println("Choose Account Type: ");
+        System.out.println("1. Saving Account (Min Balance ₹500)");
+        System.out.println("2. Current Account (Overdraft up to -₹1000)");
+        int accChoice = readIntSafe();
 
-        // Record the initial deposit as the first transaction
+        User newUser = new User(username, password, email);
+        Account newAccount;
+        if (accChoice == 1) {
+            newAccount = new SavingAccount(newUser, balance);
+        } else {
+            newAccount = new CurrentAccount(newUser, balance);
+        }
+        newUser.setAccount(newAccount);
+
         newUser.addTransaction("Initial Deposit", balance);
 
         users[userCount] = newUser;
@@ -127,10 +132,6 @@ class Main {
         return false;
     }
 
-    public static boolean isPasswordValid(String password) {
-        return Pattern.matches(PASSWORD_REGEX, password);
-    }
-
     public static int loginUser() {
         clearScreen();
         System.out.println("--- 🔑 User Login ---");
@@ -147,8 +148,7 @@ class Main {
         return -1;
     }
 
-    /* ---------------- User Menu & Operations ---------------- */
-
+    /* ---------------- User Menu ---------------- */
     public static void userMenu(int userIndex) {
         while (true) {
             clearScreen();
@@ -182,6 +182,7 @@ class Main {
         }
     }
 
+    /* ---------------- Operations ---------------- */
     public static void depositMoney(int userIndex) {
         clearScreen();
         System.out.println("--- 💰 Deposit Money ---");
@@ -189,11 +190,11 @@ class Main {
         double amount = readPositiveDouble();
         User u = users[userIndex];
 
-        u.getBankAccount().deposit(amount);
+        u.getAccount().deposit(amount);
         u.addTransaction("Deposit", amount);
 
-        System.out.println("\nSuccessfully deposited $" + format(amount));
-        System.out.println("New balance: $" + format(u.getBankAccount().getBalance()));
+        System.out.println("\nSuccessfully deposited ₹" + format(amount));
+        System.out.println("New balance: ₹" + format(u.getAccount().getBalance()));
         pause();
     }
 
@@ -204,12 +205,13 @@ class Main {
         double amount = readPositiveDouble();
         User u = users[userIndex];
 
-        if (u.getBankAccount().withdraw(amount)) {
+        if (u.getAccount().withdraw(amount)) {
             u.addTransaction("Withdrawal", amount);
-            System.out.println("\nSuccessfully withdrew $" + format(amount));
-            System.out.println("New balance: $" + format(u.getBankAccount().getBalance()));
+            System.out.println("\nSuccessfully withdrew ₹" + format(amount));
+            System.out.println("New balance: ₹" + format(u.getAccount().getBalance()));
         } else {
-            System.out.println("\n❌ Insufficient funds. Current balance: $" + format(u.getBankAccount().getBalance()));
+            System.out.println("\n❌ Withdrawal failed. Balance/limit rules violated.");
+            System.out.println("Current balance: ₹" + format(u.getAccount().getBalance()));
         }
         pause();
     }
@@ -218,25 +220,25 @@ class Main {
         clearScreen();
         User u = users[userIndex];
         System.out.println("--- 📊 Current Balance ---");
-        System.out.println("Your current balance is: $" + format(u.getBankAccount().getBalance()));
+        System.out.println("Your current balance is: ₹" + format(u.getAccount().getBalance()));
         pause();
     }
 
     public static void viewAccountDetails(int userIndex) {
         clearScreen();
         User u = users[userIndex];
-        BankAccount account = u.getBankAccount();
+        Account account = u.getAccount();
         System.out.println("--- 📜 Account Details ---");
         System.out.println("Username    : " + u.getName());
         System.out.println("Email       : " + u.getEmail());
         System.out.println("Account No. : " + account.getAccountNumber());
-        System.out.println("Balance     : $" + format(account.getBalance()));
+        System.out.println("Balance     : ₹" + format(account.getBalance()));
         System.out.println("\n--- Transaction History ---");
         if (u.getTransactionCount() == 0) {
             System.out.println("No transactions yet.");
         } else {
             for (int i = 0; i < u.getTransactionCount(); i++) {
-                System.out.printf("%-16s $%10s  %s%n",
+                System.out.printf("%-16s ₹%10s  %s%n",
                         u.getTxnType(i),
                         format(u.getTxnAmount(i)),
                         u.getTxnTimestamp(i));
@@ -245,8 +247,7 @@ class Main {
         pause();
     }
 
-    /* ---------------- Utility Methods ---------------- */
-
+    /* ---------------- Utils ---------------- */
     public static int readIntSafe() {
         while (!sc.hasNextInt()) {
             System.out.println("Invalid input. Please enter a number.");
@@ -254,7 +255,7 @@ class Main {
             System.out.print("Enter again: ");
         }
         int val = sc.nextInt();
-        sc.nextLine(); // consume newline
+        sc.nextLine();
         return val;
     }
 
@@ -301,101 +302,114 @@ class Main {
     }
 }
 
-/* ---------------- BankAccount Class ---------------- */
+/* ---------------- Person Class ---------------- */
+class Person {
+    protected String name;
+    protected String email;
 
-class BankAccount {
-    private final String accountNumber;
-    private double balance; // Corrected typo from "doubal blance"
-    private final User owner;
-
-    public BankAccount(User owner, double initialBalance) {
-        this.owner = owner;
-        this.balance = initialBalance;
-        // Generate a simple random 10-digit account number
-        this.accountNumber = String.valueOf(ThreadLocalRandom.current().nextLong(1000000000L, 9999999999L));
+    public Person(String name, String email) {
+        this.name = name;
+        this.email = email;
     }
 
-    // --- Getters ---
-    public String getAccountNumber() {
-        return accountNumber;
-    }
-
-    public double getBalance() {
-        return balance;
-    }
-
-    public User getOwner() {
-        return owner;
-    }
-
-    // --- Business Logic Methods (Better Encapsulation than a public setter for balance) ---
-    public void deposit(double amount) {
-        if (amount > 0) {
-            this.balance += amount;
-        }
-    }
-
-    public boolean withdraw(double amount) {
-        if (amount > 0 && amount <= this.balance) {
-            this.balance -= amount;
-            return true; // Withdrawal successful
-        }
-        return false; // Withdrawal failed
-    }
+    public String getName() { return name; }
+    public String getEmail() { return email; }
 }
 
-
-/* ---------------- User Class ---------------- */
-
-class User {
-    private final String userName;
+/* ---------------- User Class (extends Person) ---------------- */
+class User extends Person {
     private final String password;
-    private final String email;
+    private Account account;
 
-    // Each user is now linked to one bank account
-    private BankAccount bankAccount;
-
-    // Transaction store remains with the User to track their activity
+    // Transactions
     private static final int MAX_TXN = 500;
     private final String[] txnType = new String[MAX_TXN];
     private final double[] txnAmount = new double[MAX_TXN];
     private final String[] txnTimestamp = new String[MAX_TXN];
     private int txnCount = 0;
 
-    // Constructor updated to not include balance directly
-    public User(String userName, String password, String email) {
-        this.userName = userName;
+    public User(String name, String password, String email) {
+        super(name, email);
         this.password = password;
-        this.email = email;
     }
 
-    // --- Getters and Setters ---
-    public String getName() { return userName; }
     public String getPassword() { return password; }
-    public String getEmail() { return email; }
 
-    public BankAccount getBankAccount() {
-        return bankAccount;
-    }
+    public Account getAccount() { return account; }
+    public void setAccount(Account account) { this.account = account; }
 
-    public void setBankAccount(BankAccount bankAccount) {
-        this.bankAccount = bankAccount;
-    }
-
-    // --- Transaction Methods ---
     public void addTransaction(String type, double amount) {
-        if (txnCount >= MAX_TXN) {
-            return; // In a real system, handle this better
+        if (txnCount < MAX_TXN) {
+            txnType[txnCount] = type;
+            txnAmount[txnCount] = amount;
+            txnTimestamp[txnCount] = LocalDateTime.now()
+                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            txnCount++;
         }
-        txnType[txnCount] = type;
-        txnAmount[txnCount] = amount;
-        txnTimestamp[txnCount] = LocalDateTime.now()
-                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        txnCount++;
     }
 
     public int getTransactionCount() { return txnCount; }
     public String getTxnType(int i) { return txnType[i]; }
     public double getTxnAmount(int i) { return txnAmount[i]; }
     public String getTxnTimestamp(int i) { return txnTimestamp[i]; }
+}
+
+/* ---------------- Abstract Account Class ---------------- */
+abstract class Account {
+    protected String accountNumber;
+    protected double balance;
+    protected User owner;
+
+    public Account(User owner, double initialBalance) {
+        this.owner = owner;
+        this.balance = initialBalance;
+        this.accountNumber = String.valueOf(
+                ThreadLocalRandom.current().nextLong(1000000000L, 9999999999L));
+    }
+
+    public String getAccountNumber() { return accountNumber; }
+    public double getBalance() { return balance; }
+    public User getOwner() { return owner; }
+
+    public void deposit(double amount) {
+        if (amount > 0) balance += amount;
+    }
+
+    public abstract boolean withdraw(double amount);
+}
+
+/* ---------------- SavingAccount ---------------- */
+class SavingAccount extends Account {
+    private static final double MIN_BALANCE = 500.0;
+
+    public SavingAccount(User owner, double initialBalance) {
+        super(owner, initialBalance);
+    }
+
+    @Override
+    public boolean withdraw(double amount) {
+        if (amount > 0 && balance - amount >= MIN_BALANCE) {
+            balance -= amount;
+            return true;
+        }
+        return false;
+    }
+}
+
+/* ---------------- CurrentAccount ---------------- */
+class CurrentAccount extends Account {
+    private static final double OVERDRAFT_LIMIT = -1000.0;
+
+    public CurrentAccount(User owner, double initialBalance) {
+        super(owner, initialBalance);
+    }
+
+    @Override
+    public boolean withdraw(double amount) {
+        if (amount > 0 && balance - amount >= OVERDRAFT_LIMIT) {
+            balance -= amount;
+            return true;
+        }
+        return false;
+    }
 }
